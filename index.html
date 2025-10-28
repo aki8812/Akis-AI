@@ -146,12 +146,7 @@
       預設隱藏 (hidden)
     -->
     <div id="cameraModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center z-50 p-4">
-        <!-- 
-          *** 更新 v2 ***
-          加入了 Tailwind 的 'will-change-transform' class
-          這是更強的 GPU 渲染提示
-        -->
-        <video id="cameraVideo" playsinline autoplay class="w-full max-w-lg rounded-lg mb-4 transform-gpu will-change-transform"></video>
+        <video id="cameraVideo" playsinline autoplay class="w-full max-w-lg rounded-lg mb-4"></video>
         <div class="flex space-x-4">
             <button id="captureButton" class="bg-yellow-300 text-black font-bold py-3 px-6 rounded-full shadow-lg text-lg">拍攝</button>
             <button onclick="closeCamera()" class="bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-full shadow-lg">關閉</button>
@@ -315,29 +310,8 @@
                 cameraStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: 'environment' } // 優先使用後置鏡頭
                 });
-                
                 cameraVideo.srcObject = cameraStream;
-                
-                // --- *** 關鍵修復 v2 (for iPhone 13 Pro Max) *** ---
-                
-                // 1. 清除舊的監聽器，以防萬一
-                cameraVideo.onloadedmetadata = null;
-                
-                // 2. 設置事件監聽器。
-                //    'loadedmetadata' 事件在視訊元數據載入後觸發。
-                //    這是確保 .play() 能成功的最可靠時機。
-                cameraVideo.onloadedmetadata = () => {
-                    cameraVideo.play();
-                };
-
-                // 3. 立即嘗試播放 (適用於 iPad/iPhone 10 等正常裝置)
-                //    如果 'loadedmetadata' 已經觸發過了，這會被忽略
-                cameraVideo.play();
-                
-                // ------------------------------------------------
-
                 cameraModal.classList.remove('hidden');
-
             } catch (err) {
                 console.error("無法開啟相機:", err);
                 alert("無法開啟相機。請確認您已授權。");
@@ -345,41 +319,20 @@
         }
 
         /**
-         * 關閉相機 (增強的清理順序)
+         * 關閉相機
          */
         function closeCamera() {
-            // 1. 先暫停 <video> 元素
-            cameraVideo.pause();
-
-            // 2. 移除 srcObject，斷開與 <video> 的連接
-            cameraVideo.srcObject = null;
-
-            // 3. 停止硬體串流
             if (cameraStream) {
                 cameraStream.getTracks().forEach(track => track.stop());
             }
-            
-            // 4. 清理串流變數
-            cameraStream = null;
-            
-            // 5. 移除事件監聽器 (好習慣)
-            cameraVideo.onloadedmetadata = null; 
-
-            // 6. 隱藏 Modal
             cameraModal.classList.add('hidden');
+            cameraVideo.srcObject = null;
         }
 
         /**
          * 拍攝照片
          */
         captureButton.onclick = () => {
-            // 檢查 video 尺寸是否有效
-            if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) {
-                console.error("相機畫面尚未準備好，無法拍攝。");
-                // 可以在此顯示一個短暫的錯誤訊息
-                return;
-            }
-            
             cameraCanvas.width = cameraVideo.videoWidth;
             cameraCanvas.height = cameraVideo.videoHeight;
             const context = cameraCanvas.getContext('2d');
@@ -396,6 +349,7 @@
                 mcqImagesBase64.push(base64Data);
                 updateImagePreview('mcq', base64Data, true);
                 // 選擇題模式不自動關閉，讓使用者可以拍多張
+                // 可以在此加一個提示，例如 "已拍攝第 N 張"
             }
         };
 
@@ -407,7 +361,7 @@
          * 顯示載入中、錯誤或結果
          * @param {object} ui - ui 元素物件 (e.g., translation 或 mcq)
          * @param {string} state - 'loading', 'error', 'success'
-         * @param {string} content - 要顯示的內容 (錯誤訊息或 successo 結果)
+         * @param {string} content - 要顯示的內容 (錯誤訊息或成功結果)
          */
         function showResultState(ui, state, content = '') {
             ui.loader.classList.add('hidden');
