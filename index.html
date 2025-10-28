@@ -6,7 +6,18 @@
     <title>英文作業小幫手</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 網站圖示 (瀏覽器分頁) -->
     <link rel="icon" type="image/x-icon" href="favicon.ico">
+    
+    <!-- PWA manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- PWA 相關 meta -->
+    <meta name="theme-color" content="#f0f9ff">
+    <!-- 更新：iOS 圖示指向 192px 的 PNG -->
+    <link rel="apple-touch-icon" href="icon/icon-192x192.png"> 
+
     <!-- 設定字體，優先使用 Inter，並包含你偏好的「微軟正黑體」 -->
     <style>
       body {
@@ -160,12 +171,10 @@
       JavaScript 邏輯
     -->
     <script>
-        // -----------------------------------------------------------------
-        // API 設定
-        // -----------------------------------------------------------------
+
         const API_KEY = "AIzaSyApDCdccFbZv-HqISVjTryU9e1ufnbJ8Cs";
         
-
+        // 我們使用 gemini-2.5-flash-preview-09-2025 模型，因為它支援圖片輸入 (vision)
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
 
         // -----------------------------------------------------------------
@@ -407,7 +416,7 @@
             if (textInput && !translationImageBase64) {
                 prompt = `請將以下中文句子翻譯為通順的英文：\n"${textInput}"\n\n請提供3種不同的、語氣中性且常用（非過度正式或口語）的翻譯版本。請用數字列表格式回覆。`;
             } else if (translationImageBase64) {
-                prompt = `這是一張包含中文句子的圖片。請翻譯圖片中的中文句子為通順的英文。如果圖片中有多個句子，請翻譯主要的句子，或是最多兩句。\n\n請提供3種不同的、語氣中性且常用（非過度正式或口語）的翻譯版本。請用數字列表格式回覆。`;
+                prompt = `這是一張包含中文句子的圖片。請翻譯圖片中的中文句子為通順的英文。如果圖片中有多個句子，請翻譯主要的句子，或是最多兩句。\n\n請提供3種不同的、語氣中性且常用（非過度正式或口D）的翻譯版本。請用數字列表格式回覆。`;
             }
 
             // 準備圖片資料
@@ -521,7 +530,7 @@
                     }
                 
                 } catch (error) {
-                    console.error(`API 呼叫失敗 (第 ${attempt + 1} 次):`, error);
+                    console.error(`API C呼叫失敗 (第 ${attempt + 1} 次):`, error);
                     attempt++;
                     if (attempt >= retries) {
                         // 最後一次重試失敗，拋出錯誤
@@ -534,6 +543,21 @@
             }
         }
 
+    </script>
+    
+    <!-- PWA Service Worker 註冊腳本 -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(registration => {
+                        console.log('Service Worker 註冊成功:', registration);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker 註冊失敗:', error);
+                    });
+            });
+        }
     </script>
 </body>
 </html>

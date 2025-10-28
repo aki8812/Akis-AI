@@ -1,0 +1,26 @@
+{
+  "name": "英文作業小幫手",
+  "short_name": "作業幫手",
+  "description": "使用 Gemini 2.5 輔助英文作業的 PWA",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "icon/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "index.html",
+  "display": "standalone",
+  "theme_color": "#f0f9ff",
+  "background_color": "#f0f9ff"
+}
