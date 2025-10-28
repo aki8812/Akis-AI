@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aki 的英文作業幫手</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- 載入 Markdown-it (用來渲染 Gemini 的回應) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/14.1.0/markdown-it.min.js"></script>
+    <!-- 自訂字體與樣式 -->
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', 'Inter', sans-serif;
+        }
+        /* 自訂顏色 */
+        .bg-sky-light { background-color: #F0F9FF; }
+        .hover\:bg-sky-light-hover:hover { background-color: #E0F2FE; }
+        .border-sky-light { border-color: #BFE6FF; }
+        .text-sky-dark { color: #0C4A6E; }
+        
+        .bg-lemon-light { background-color: #FFFBEB; }
+        .hover\:bg-lemon-light-hover:hover { background-color: #FEF3C7; }
+        .border-lemon-light { border-color: #FDE68A; }
+        .text-lemon-dark { color: #78350F; }
+
+        /* 隱藏/顯示頁面 */
+        .page-section {
+            display: none; /* 預設隱藏 */
+        }
+        .page-section.active {
+            display: block; /* 顯示當前頁面 */
+        }
+
+        /* 特別修正：
+           page-main 需要 flex 才能置中 (因為它有 flex items-center justify-center classes), 
+           我們的 .active 規則會覆蓋 tailwind 的 'flex'。
+           所以我們用 !important 強制 page-main 在 active 時為 flex。
+        */
+        #page-main.active {
+            display: flex !important;
+        }
+
+        /* 頁籤樣式 */
+        .tab-btn {
+            @apply px-4 py-2 font-medium text-lg rounded-t-lg transition-colors duration-200;
+        }
+        .tab-btn.active {
+            @apply bg-sky-light text-sky-dark border-b-4 border-sky-500;
+        }
+        .tab-btn:not(.active) {
+            @apply text-gray-500 hover:text-gray-800 hover:bg-gray-100;
+        }
+        .tab-content { @apply hidden; }
+        .tab-content.active { @apply block; }
+
+        /* 相機 Modal */
+        #camera-modal {
+            @apply fixed inset-0 bg-black bg-opacity-80 flex-col items-center justify-center z-50 hidden; /* 預設隱藏 */
+        }
+        #camera-stream {
+            @apply w-full max-w-3xl h-auto rounded-lg shadow-lg;
+            transform: scaleX(-1); /* 鏡像翻轉 */
+        }
+        
+        /* 翻譯頁 - 預覽圖片 */
+        #translate-preview-image-container {
+            @apply border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50;
+        }
+        
+        /* 選擇題 - 圖片預覽網格 */
+        .preview-grid-item {
+            @apply relative w-full h-40 rounded-lg overflow-hidden shadow-md;
+        }
+        .preview-grid-item img {
+            @apply w-full h-full object-cover;
+        }
+        .preview-grid-item .remove-btn {
+            @apply absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full opacity-80 hover:opacity-100 transition-opacity;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+    <!-- Header (共用) -->
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-4 md:px-8 md:py-6">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
+                <i data-lucide="brain-circuit" class="text-sky-dark"></i>
+                <span id="header-title">Aki 的英文作業幫手</span>
+            </h1>
+            <p id="header-subtitle" class="text-gray-600 mt-1">使用 Gemini API 輔助你的英文學習</p>
+        </div>
+    </header>
+
+    <!-- ====================================================================== -->
+    <!-- 頁面容器 (Main Content)                                                -->
+    <!-- ====================================================================== -->
+
+    <!-- 1. 主頁 (預設顯示) -->
+    <main id="page-main" class="page-section active flex-grow container mx-auto px-4 py-8 md:px-8 md:py-16 flex items-center justify-center">
+        <div class="w-full max-w-4xl">
+            <h2 class="text-xl md:text-2xl font-bold text-center text-gray-700 mb-8 md:mb-12">請選擇你需要的功能：</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
+                
+                <!-- 進入翻譯頁面按鈕 -->
+                <button id="goto-translate"
+                   class="block p-6 md:p-8 bg-sky-light border-2 border-sky-light rounded-2xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 ease-in-out hover:bg-sky-light-hover">
+                    <div class="flex flex-col items-center text-center">
+                        <div class="p-4 bg-white rounded-full shadow-md mb-5">
+                            <i data-lucide="languages" class="w-10 h-10 md:w-12 md:h-12 text-sky-dark pointer-events-none"></i>
+                        </div>
+                        <h3 class="text-xl md:text-2xl font-bold text-sky-dark mb-2 pointer-events-none">中英翻譯</h3>
+                        <p class="text-gray-600 pointer-events-none">輸入中文句子或上傳圖片，取得 3 種不同的英文翻譯。</p>
+                    </div>
+                </button>
+
+                <!-- 進入選擇題頁面按鈕 -->
+                <button id="goto-mcq"
+                   class="block p-6 md:p-8 bg-lemon-light border-2 border-lemon-light rounded-2xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 ease-in-out hover:bg-lemon-light-hover">
+                    <div class="flex flex-col items-center text-center">
+                        <div class="p-4 bg-white rounded-full shadow-md mb-5">
+                            <i data-lucide="check-check" class="w-10 h-10 md:w-12 md:h-12 text-lemon-dark pointer-events-none"></i>
+                        </div>
+                        <h3 class="text-xl md:text-2xl font-bold text-lemon-dark mb-2 pointer-events-none">選擇題 / 閱讀測驗</h3>
+                        <p class="text-gray-600 pointer-events-none">上傳單張或多張作業圖片，Gemini 將幫你找出答案。</p>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- 2. 翻譯頁面 (預設隱藏) -->
+    <main id="page-translate" class="page-section container mx-auto px-4 py-8 md:px-8 md:py-12">
+        <button class="go-back flex items-center gap-2 text-gray-600 hover:text-sky-dark transition-colors mb-4">
+            <i data-lucide="arrow-left"></i>
+            返回主頁
+        </button>
+        <div class="max-w-4xl mx-auto bg-white p-6 md:p-8 rounded-2xl shadow-lg">
+            <!-- 頁籤按鈕 -->
+            <div class="border-b border-gray-200 mb-6">
+                <nav class="-mb-px flex gap-4" id="translate-tabs">
+                    <button class="tab-btn active" data-tab="text">
+                        <i data-lucide="type" class="inline-block w-5 h-5 mr-2"></i>文字輸入
+                    </button>
+                    <button class="tab-btn" data-tab="image">
+                        <i data-lucide="image" class="inline-block w-5 h-5 mr-2"></i>圖片/掃描
+                    </button>
+                </nav>
+            </div>
+            <!-- 頁籤內容 -->
+            <div>
+                <!-- 文字輸入 -->
+                <div id="translate-tab-text" class="tab-content active">
+                    <p class="text-gray-600 mb-4">請輸入你想要翻譯的 1 到 2 句中文句子。</p>
+                    <div class="space-y-4">
+                        <textarea id="sentence1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-300 focus:border-sky-500" rows="3" placeholder="句子一..."></textarea>
+                        <textarea id="sentence2" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-300 focus:border-sky-500" rows="3" placeholder="句子二（可選）..."></textarea>
+                        <button id="translate-text-btn" class="w-full flex items-center justify-center gap-2 px-6 py-3 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors shadow-md">
+                            <i data-lucide="send"></i>
+                            開始翻譯
+                        </button>
+                    </div>
+                </div>
+                <!-- 圖片/掃描 -->
+                <div id="translate-tab-image" class="tab-content">
+                    <div class="space-y-4">
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            <label class="flex-1 cursor-pointer flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-sky-500 text-sky-600 font-bold rounded-lg hover:bg-sky-50 transition-colors">
+                                <i data-lucide="upload"></i>
+                                上傳圖片
+                                <input type="file" id="translate-image-upload" class="hidden" accept="image/*">
+                            </label>
+                            <button id="translate-open-camera-btn" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors shadow-md">
+                                <i data-lucide="camera"></i>
+                                開啟相機掃描
+                            </button>
+                        </div>
+                        <!-- 預覽區域 -->
+                        <div id="translate-preview-container" class="hidden space-y-4">
+                            <h3 class="text-lg font-semibold text-gray-700">圖片預覽：</h3>
+                            <div id="translate-preview-image-container">
+                                <img id="translate-preview-image" src="" alt="圖片預覽" class="w-full max-w-lg mx-auto rounded-lg shadow-md">
+                            </div>
+                            <div class="flex flex-col sm:flex-row gap-4">
+                                <button id="translate-retry-scan-btn" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600 transition-colors">
+                                    <i data-lucide="refresh-cw"></i>
+                                    重新上傳/掃描
+                                </button>
+                                <button id="translate-image-btn" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors shadow-md">
+                                    <i data-lucide="send"></i>
+                                    確定並開始翻譯
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 輸出結果 -->
+            <div id="translate-result-container" class="mt-8">
+                <div id="translate-loading-spinner" class="hidden flex flex-col items-center justify-center text-gray-500 space-y-3 p-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-sky-600"></div>
+                    <p class="text-lg font-medium">Gemini 正在思考中...</p>
+                </div>
+                <div id="translate-error-message" class="hidden p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg"></div>
+                <div id="translate-result" class="prose prose-lg max-w-none bg-sky-light p-6 rounded-lg hidden"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 3. 選擇題頁面 (預設隱藏) -->
+    <main id="page-mcq" class="page-section container mx-auto px-4 py-8 md:px-8 md:py-12">
+        <button class="go-back flex items-center gap-2 text-gray-600 hover:text-lemon-dark transition-colors mb-4">
+            <i data-lucide="arrow-left"></i>
+            返回主頁
+        </button>
+        <div class="max-w-4xl mx-auto bg-white p-6 md:p-8 rounded-2xl shadow-lg">
+            <!-- 輸入區域 -->
+            <div class="space-y-4">
+                <p class="text-gray-600 mb-4">請上傳單張或多張作業圖片，或使用相機掃描。Gemini 會依序分析。</p>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <label class="flex-1 cursor-pointer flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-lemon-500 text-lemon-600 font-bold rounded-lg hover:bg-lemon-50 transition-colors">
+                        <i data-lucide="upload"></i>
+                        上傳圖片
+                        <input type="file" id="mcq-image-upload" class="hidden" accept="image/*" multiple>
+                    </label>
+                    <button id="mcq-open-camera-btn" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-lemon-600 text-white font-bold rounded-lg hover:bg-lemon-700 transition-colors shadow-md">
+                        <i data-lucide="camera"></i>
+                        開啟相機掃描
+                    </button>
+                </div>
+            </div>
+            <!-- 圖片佇列預覽 -->
+            <div id="mcq-preview-section" class="mt-8 space-y-4">
+                <h3 class="text-lg font-semibold text-gray-700">待處理圖片佇列：</h3>
+                <div id="mcq-image-preview-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
+                <p id="mcq-no-images-text" class="text-gray-500 text-center py-4">目前沒有圖片。</p>
+                <button id="solve-mcq-btn" class="w-full flex items-center justify-center gap-2 px-6 py-3 bg-lemon-600 text-white font-bold rounded-lg hover:bg-lemon-700 transition-colors shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <i data-lucide="brain"></i>
+                    開始解題
+                </button>
+            </div>
+            <!-- 輸出結果 -->
+            <div id="mcq-result-container" class="mt-8">
+                <div id="mcq-loading-spinner" class="hidden flex flex-col items-center justify-center text-gray-500 space-y-3 p-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-lemon-600"></div>
+                    <p class="text-lg font-medium">Gemini 正在努力解題中...</p>
+                </div>
+                <div id="mcq-error-message" class="hidden p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg"></div>
+                <div id="mcq-result" class="prose prose-lg max-w-none bg-lemon-light p-6 rounded-lg hidden"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer (共用) -->
+    <footer class="bg-white border-t border-gray-200 mt-12">
+        <div class="container mx-auto px-4 py-6 text-center text-gray-500">
+            &copy; 2025 Aki's Homework Helper.
+        </div>
+    </footer>
+
+    <!-- ====================================================================== -->
+    <!-- 共用 Modal (相機)                                                      -->
+    <!-- ====================================================================== -->
+    <div id="camera-modal" class="hidden">
+        <video id="camera-stream" autoplay playsinline></video>
+        <!-- Canvas 用於從影片抓取影像，但平常隱藏 -->
+        <canvas id="capture-canvas" class="hidden"></canvas>
+        <div class="flex gap-4 mt-6">
+            <button id="capture-btn" class="p-4 bg-white rounded-full shadow-lg transition-transform hover:scale-110">
+                <i data-lucide="aperture" class="w-8 h-8 text-sky-600"></i>
+            </button>
+            <button id="close-camera-btn" class="p-4 bg-gray-700 text-white rounded-full shadow-lg transition-transform hover:scale-110">
+                <i data-lucide="x" class="w-8 h-8"></i>
+            </button>
+        </div>
+        <p id="camera-hint" class="text-white text-lg mt-4"></p>
+    </div>
+
+    <!-- 
+      修正：移除舊的 Lucide Icons 啟動 SCRIPT
+    <script>
+        lucide.createIcons();
+    </script>
+    -->
+
+    <!-- ====================================================================== -->
+    <!-- 主要 JavaScript 邏輯 (整合版)                                        -->
+    <!-- ====================================================================== -->
+    <script>
+    window.addEventListener('load', () => { // <--- 修正：將所有程式碼包在 'load' 事件中
+        
+        // 修正：將 Lucide Icons 啟動移到 'load' 事件內部
+        lucide.createIcons();
+
+        // ######################################################################
+        // #                          API 設定                                  #
+        // ######################################################################
+        
+        // Aki，請在這裡貼上你的 Google AI Studio API 金鑰
+        const API_KEY = "AIzaSyApDCdccFbZv-HqISVjTryU9e1ufnbJ8Cs"; 
+        
+        // 使用你指定的 Gemini 2.5 Pro
+        // 2025/09/09 更新：使用 gemini-2.5-pro-preview-09-2025
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-09-2025:generateContent?key=${API_KEY}`;
+        const md = window.markdownit(); // <-- 修正：現在 'markdownit' 函式庫已載入
+
+        // ######################################################################
+        // #                      頁面導航 (Navigation)                         #
+        // ######################################################################
+        const pages = {
+            main: document.getElementById('page-main'),
+            translate: document.getElementById('page-translate'),
+            mcq: document.getElementById('page-mcq'),
+        };
+        
+        const headerTitle = document.getElementById('header-title');
+        const headerSubtitle = document.getElementById('header-subtitle');
+
+        function navigateTo(pageName) {
+            // 隱藏所有頁面
+            Object.values(pages).forEach(page => page.classList.remove('active'));
+            
+            // 顯示目標頁面
+            if (pages[pageName]) {
+                pages[pageName].classList.add('active');
+            }
+            
+            // 更新 Header
+            switch(pageName) {
+                case 'translate':
+                    headerTitle.textContent = '中英翻譯';
+                    headerSubtitle.textContent = '輸入文字或掃描圖片來獲得翻譯';
+                    break;
+                case 'mcq':
+                    headerTitle.textContent = '選擇題 / 閱讀測驗';
+                    headerSubtitle.textContent = '上傳圖片讓 Gemini 協助你解題';
+                    break;
+                default:
+                    headerTitle.textContent = 'Aki 的英文作業幫手';
+                    headerSubtitle.textContent = '使用 Gemini API 輔助你的英文學習';
+                    break;
+            }
+            // 滾動到頁面頂部
+            window.scrollTo(0, 0);
+        }
+
+        document.getElementById('goto-translate').addEventListener('click', () => navigateTo('translate'));
+        document.getElementById('goto-mcq').addEventListener('click', () => navigateTo('mcq'));
+        document.querySelectorAll('.go-back').forEach(btn => {
+            btn.addEventListener('click', () => navigateTo('main'));
+        });
+
+        // ######################################################################
+        // #                     Gemini API 呼叫 (共用)                         #
+        // ######################################################################
+
+        /**
+         * 帶有指數退避的 fetch
+         */
+        async function fetchWithExponentialBackoff(url, options, maxRetries = 5) {
+            // ... (此函數與先前版本相同)
+            let delay = 1000;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429 || (response.status >= 500 && response.status <= 599)) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.warn(`Attempt ${i + 1} failed: ${error.message}. Retrying in ${delay}ms...`);
+                    if (i === maxRetries - 1) throw error;
+                    await new Promise(resolve => setTimeout(resolve, delay + Math.random() * 1000));
+                    delay *= 2;
+                }
+            }
+        }
+
+        /**
+         * 呼叫 Gemini API (包裝)
+         * @param {object} payload - API payload
+         * @param {HTMLElement} loadingEl - 讀取中 spinner
+         * @param {HTMLElement} errorEl - 錯誤訊息 div
+         * @param {HTMLElement} resultEl - 結果顯示 div
+         */
+        async function callGeminiAPI(payload, loadingEl, errorEl, resultEl) {
+            loadingEl.classList.remove('hidden');
+            errorEl.classList.add('hidden');
+            resultEl.classList.add('hidden');
+
+            try {
+                const result = await fetchWithExponentialBackoff(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts[0].text) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    resultEl.innerHTML = md.render(text);
+                    resultEl.classList.remove('hidden');
+                } else {
+                    console.warn("API response was successful but missing content:", result);
+                    errorEl.textContent = "API 沒有返回有效的回答。";
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error("Gemini API 呼叫失敗:", error);
+                errorEl.textContent = `呼叫 API 時發生錯誤: ${error.message}. (請檢查 API 金鑰是否正確，以及網路連線)`;
+                errorEl.classList.remove('hidden');
+            } finally {
+                loadingEl.classList.add('hidden');
+            }
+        }
+        
+        // 圖片轉 Base64 (共用)
+        function imageToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    const base64 = reader.result.split(',')[1];
+                    resolve(base64);
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // ######################################################################
+        // #                      共用相機 (Camera) 邏輯                        #
+        // ######################################################################
+        
+        const cameraModal = document.getElementById('camera-modal');
+        const cameraStreamEl = document.getElementById('camera-stream');
+        const captureCanvas = document.getElementById('capture-canvas');
+        const captureBtn = document.getElementById('capture-btn');
+        const closeCameraBtn = document.getElementById('close-camera-btn');
+        const cameraHint = document.getElementById('camera-hint');
+        
+        let currentStream = null;
+        let currentCameraWorkflow = null; // 'translate' 或 'mcq'
+        
+        // 開啟相機
+        async function openCamera(workflow, hint) {
+            currentCameraWorkflow = workflow;
+            cameraHint.textContent = hint || '';
+            
+            // 根據 workflow 改變按鈕顏色
+            const icon = captureBtn.querySelector('i');
+            if (workflow === 'mcq') {
+                icon.classList.remove('text-sky-600');
+                icon.classList.add('text-lemon-600');
+            } else {
+                icon.classList.remove('text-lemon-600');
+                icon.classList.add('text-sky-600');
+            }
+
+            try {
+                currentStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' } 
+                });
+                cameraStreamEl.srcObject = currentStream;
+                cameraModal.classList.remove('hidden');
+                cameraModal.classList.add('flex');
+            } catch (err) {
+                console.error("無法開啟相機:", err);
+                if (workflow === 'translate') {
+                    showTranslateError("無法開啟相機。請檢查瀏覽器權限。");
+                } else {
+                    showMcqError("無法開啟相機。請檢查瀏覽器權限。");
+                }
+            }
+        }
+        
+        // 關閉相機
+        function closeCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+            }
+            cameraStreamEl.srcObject = null;
+            cameraModal.classList.add('hidden');
+            cameraModal.classList.remove('flex');
+            currentCameraWorkflow = null;
+        }
+
+        closeCameraBtn.addEventListener('click', closeCamera);
+        
+        // 拍照
+        captureBtn.addEventListener('click', () => {
+            captureCanvas.width = cameraStreamEl.videoWidth;
+            captureCanvas.height = cameraStreamEl.videoHeight;
+            const context = captureCanvas.getContext('2d');
+            
+            context.save();
+            context.scale(-1, 1);
+            context.drawImage(cameraStreamEl, -captureCanvas.width, 0, captureCanvas.width, captureCanvas.height);
+            context.restore();
+
+            const dataUrl = captureCanvas.toDataURL('image/jpeg', 0.9);
+            const base64 = dataUrl.split(',')[1];
+            
+            if (currentCameraWorkflow === 'translate') {
+                // --- 翻譯工作流程 ---
+                currentImageBase64 = base64;
+                translatePreviewImage.src = dataUrl;
+                translatePreviewContainer.classList.remove('hidden');
+                closeCamera(); // 翻譯是單張，拍完就關
+            } else if (currentCameraWorkflow === 'mcq') {
+                // --- 選擇題工作流程 ---
+                addImageToMcqQueue(base64, dataUrl);
+                // 不關閉相機，允許連拍
+            }
+        });
+
+        // ######################################################################
+        // #                      翻譯 (Translate) 邏輯                         #
+        // ######################################################################
+        
+        // DOM
+        const translateLoading = document.getElementById('translate-loading-spinner');
+        const translateError = document.getElementById('translate-error-message');
+        const translateResult = document.getElementById('translate-result');
+        
+        const translateTabs = document.getElementById('translate-tabs');
+        const translateTabContents = {
+            text: document.getElementById('translate-tab-text'),
+            image: document.getElementById('translate-tab-image'),
+        };
+        const sentence1Input = document.getElementById('sentence1');
+        const sentence2Input = document.getElementById('sentence2');
+        const translateTextBtn = document.getElementById('translate-text-btn');
+        
+        const translateImageUpload = document.getElementById('translate-image-upload');
+        const translateOpenCameraBtn = document.getElementById('translate-open-camera-btn');
+        const translatePreviewContainer = document.getElementById('translate-preview-container');
+        const translatePreviewImage = document.getElementById('translate-preview-image');
+        const translateRetryScanBtn = document.getElementById('translate-retry-scan-btn');
+        const translateImageBtn = document.getElementById('translate-image-btn');
+
+        let currentImageBase64 = null;
+        
+        // UI 
+        function showTranslateError(message) {
+            translateError.textContent = message;
+            translateError.classList.remove('hidden');
+            translateResult.classList.add('hidden');
+        }
+        
+        function resetTranslateUI() {
+            translateLoading.classList.add('hidden');
+            translateError.classList.add('hidden');
+            translateResult.classList.add('hidden');
+            translateResult.innerHTML = '';
+            translatePreviewContainer.classList.add('hidden');
+            translatePreviewImage.src = '';
+            currentImageBase64 = null;
+            translateImageUpload.value = null;
+        }
+
+        // 頁籤
+        translateTabs.addEventListener('click', (e) => {
+            const clickedTab = e.target.closest('.tab-btn');
+            if (!clickedTab) return;
+
+            translateTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            Object.values(translateTabContents).forEach(content => content.classList.remove('active'));
+
+            const tabName = clickedTab.dataset.tab;
+            clickedTab.classList.add('active');
+            translateTabContents[tabName].classList.add('active');
+            
+            resetTranslateUI();
+            sentence1Input.value = '';
+            sentence2Input.value = '';
+        });
+
+        // 文字翻譯
+        translateTextBtn.addEventListener('click', () => {
+            const sentence1 = sentence1Input.value.trim();
+            const sentence2 = sentence2Input.value.trim();
+            
+            if (!sentence1) {
+                showTranslateError("請至少輸入「句子一」。");
+                return;
+            }
+
+            let textPrompt = `請將「${sentence1}」翻譯成 3 種不同的自然英文句子。`;
+            if (sentence2) {
+                textPrompt = `請將以下兩個句子各翻譯成 3 種不同的自然英文句子：\n1. 「${sentence1}」\n2. 「${sentence2}」`;
+            }
+
+            const systemInstruction = "你是一個專業的中英翻譯助手。請提供三種流暢且自然的英文翻譯，風格為一般用法，避免過度正式或口語化。";
+
+            const payload = {
+                contents: [{ parts: [{ text: textPrompt }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: { temperature: 0.7, topK: 40, topP: 0.95 }
+            };
+            
+            callGeminiAPI(payload, translateLoading, translateError, translateResult);
+        });
+
+        // 圖片上傳 (翻譯)
+        translateImageUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    resetTranslateUI();
+                    currentImageBase64 = await imageToBase64(file);
+                    translatePreviewImage.src = `data:image/jpeg;base64,${currentImageBase64}`;
+                    translatePreviewContainer.classList.remove('hidden');
+                } catch (error) {
+                    showTranslateError("讀取圖片失敗：" + error.message);
+                }
+            }
+        });
+        
+        translateRetryScanBtn.addEventListener('click', resetTranslateUI);
+        
+        // 開啟相機 (翻譯)
+        translateOpenCameraBtn.addEventListener('click', () => {
+            resetTranslateUI();
+            openCamera('translate', '請對準要翻譯的單一句子');
+        });
+
+        // 圖片翻譯
+        translateImageBtn.addEventListener('click', () => {
+            if (!currentImageBase64) {
+                showTranslateError("沒有要翻譯的圖片。");
+                return;
+            }
+            const textPrompt = "請辨識這張圖片中的中文句子（可能只有一句），並提供三種自然的英文翻譯。";
+            const systemInstruction = "你是一個專業的中英翻譯助手。使用者提供了一張圖片。請先辨識圖片中的中文文字，然後提供三種流暢且自然的英文翻譯，風格為一般用法。如果圖片中有多個句子，請專注翻譯主要的句子。";
+
+            const payload = {
+                contents: [{
+                    role: "user",
+                    parts: [
+                        { text: textPrompt },
+                        { inlineData: { mimeType: "image/jpeg", data: currentImageBase64 } }
+                    ]
+                }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: { temperature: 0.7 }
+            };
+            callGeminiAPI(payload, translateLoading, translateError, translateResult);
+        });
+
+
+        // ######################################################################
+        // #                     選擇題 (MCQ) 邏輯                            #
+        // ######################################################################
+
+        // DOM
+        const mcqLoading = document.getElementById('mcq-loading-spinner');
+        const mcqError = document.getElementById('mcq-error-message');
+        const mcqResult = document.getElementById('mcq-result');
+        
+        const mcqImageUpload = document.getElementById('mcq-image-upload');
+        const mcqOpenCameraBtn = document.getElementById('mcq-open-camera-btn');
+        const solveMcqBtn = document.getElementById('solve-mcq-btn');
+        
+        const mcqImagePreviewGrid = document.getElementById('mcq-image-preview-grid');
+        const mcqNoImagesText = document.getElementById('mcq-no-images-text');
+
+        let mcqImageQueue = []; // 儲存所有待處理的圖片
+
+        // UI
+        function showMcqError(message) {
+            mcqError.textContent = message;
+            mcqError.classList.remove('hidden');
+            mcqResult.classList.add('hidden');
+        }
+
+        // 圖片佇列管理
+        function addImageToMcqQueue(base64, dataUrl) {
+            mcqImageQueue.push({ id: Date.now() + Math.random(), base64: base64, dataUrl: dataUrl });
+            renderMcqImagePreviews();
+        }
+        
+        function renderMcqImagePreviews() {
+            mcqImagePreviewGrid.innerHTML = ''; // 清空
+            
+            if (mcqImageQueue.length === 0) {
+                mcqNoImagesText.classList.remove('hidden');
+                solveMcqBtn.disabled = true;
+            } else {
+                mcqNoImagesText.classList.add('hidden');
+                solveMcqBtn.disabled = false;
+                
+                mcqImageQueue.forEach((imgData, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'preview-grid-item';
+                    item.innerHTML = `
+                        <img src="${imgData.dataUrl}" alt="預覽 ${index + 1}">
+                        <button class="remove-btn" data-id="${imgData.id}" title="移除這張圖片">
+                            <i data-lucide="x" class="w-4 h-4 pointer-events-none"></i>
+                        </button>
+                    `;
+                    // 修正：將 'id' 傳遞給 removeImageFromQueue
+                    item.querySelector('.remove-btn').addEventListener('click', (e) => {
+                        const idToRemove = parseFloat(e.currentTarget.dataset.id);
+                        mcqImageQueue = mcqImageQueue.filter(img => img.id !== idToRemove);
+                        renderMcqImagePreviews();
+                    });
+                    mcqImagePreviewGrid.appendChild(item);
+                });
+                lucide.createIcons();
+            }
+        }
+        
+        // 圖片上傳 (MCQ)
+        mcqImageUpload.addEventListener('change', async (e) => {
+            mcqResult.classList.add('hidden');
+            mcqError.classList.add('hidden');
+            const files = e.target.files;
+            
+            if (files.length > 0) {
+                mcqLoading.classList.remove('hidden');
+                for (const file of files) {
+                    try {
+                        const base64 = await imageToBase64(file);
+                        addImageToMcqQueue(base64, `data:image/jpeg;base64,${base64}`);
+                    } catch (error) {
+                        showMcqError("讀取圖片失敗：" + error.message);
+                    }
+                }
+                mcqLoading.classList.add('hidden');
+            }
+            mcqImageUpload.value = null;
+        });
+
+        // 開啟相機 (MCQ)
+        mcqOpenCameraBtn.addEventListener('click', () => {
+            mcqResult.classList.add('hidden');
+            mcqError.classList.add('hidden');
+            openCamera('mcq', '提示：拍完一張後，可繼續掃描下一張');
+        });
+
+        // 開始解題
+        solveMcqBtn.addEventListener('click', () => {
+            if (mcqImageQueue.length === 0) {
+                showMcqError("請至少上傳一張圖片。");
+                return;
+            }
+
+            const textPrompt = "請幫我解答這些圖片中的英文選擇題或閱讀測驗。請依序分析每張圖片，清楚地列出題號、你選擇的正確答案（例如 A, B, C, D），並**簡短說明**你選擇該答案的理由。";
+            const systemInstruction = "你是一位專業的英文老師與解題專家。使用者提供了一張或多張英文作業的圖片。請你仔細地分析圖片中的所有問題（包含選擇題、配合題、閱讀測驗等）。你的回答應該包含：1. 題號（如果有的話）。 2. 正確答案。 3. 簡潔的解題說明或為什麼該答案正確。請按照圖片順序和題目順序有條理地回答。";
+            
+            const parts = [ { text: textPrompt } ];
+            mcqImageQueue.forEach(imgData => {
+                parts.push({
+                    inlineData: { mimeType: "image/jpeg", data: imgData.base64 }
+                });
+            });
+
+            const payload = {
+                contents: [{ role: "user", parts: parts }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: { temperature: 0.3, topK: 40, topP: 0.95 }
+            };
+
+            callGeminiAPI(payload, mcqLoading, mcqError, mcqResult);
+        });
+        
+        // 初始狀態
+        renderMcqImagePreviews();
+
+    }); // <--- 修正：'load' 事件監聽器的結尾
+    </script>
+</body>
+</html>
