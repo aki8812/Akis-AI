@@ -1,7 +1,7 @@
 {
-  "name": "英文作業小幫手",
-  "short_name": "作業幫手",
-  "description": "使用 Gemini 2.5 輔助英文作業的 PWA",
+  "name": "Aki's AI",
+  "short_name": "Aki's AI",
+  "description": "使用 Gemini 2.5",
   "icons": [
     {
       "src": "icon/icon-192x192.png",
