@@ -146,7 +146,12 @@
       預設隱藏 (hidden)
     -->
     <div id="cameraModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center z-50 p-4">
-        <video id="cameraVideo" playsinline autoplay class="w-full max-w-lg rounded-lg mb-4"></video>
+        <!-- 
+          *** 更新 ***
+          在這裡加入了 Tailwind 的 'transform-gpu' class
+          這會強制啟用硬體加速，修復 iOS PWA 上的渲染問題
+        -->
+        <video id="cameraVideo" playsinline autoplay class="w-full max-w-lg rounded-lg mb-4 transform-gpu"></video>
         <div class="flex space-x-4">
             <button id="captureButton" class="bg-yellow-300 text-black font-bold py-3 px-6 rounded-full shadow-lg text-lg">拍攝</button>
             <button onclick="closeCamera()" class="bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-full shadow-lg">關閉</button>
@@ -311,6 +316,12 @@
                     video: { facingMode: 'environment' } // 優先使用後置鏡頭
                 });
                 cameraVideo.srcObject = cameraStream;
+                
+                // --- *** 關鍵修復 *** ---
+                // 強制呼叫 play()，因為 autoplay 在 iOS PWA 中不可靠
+                cameraVideo.play();
+                // -----------------------
+
                 cameraModal.classList.remove('hidden');
             } catch (err) {
                 console.error("無法開啟相機:", err);
@@ -508,7 +519,7 @@
                         }
                         
                         const text = result.candidates[0].content.parts[0].text;
-                        return text; // 成功，回傳文字
+                        return text; //  successo, 回傳文字
                     
                     } else if (result.promptFeedback && result.promptFeedback.blockReason) {
                         // 檢查是否有提示阻擋
