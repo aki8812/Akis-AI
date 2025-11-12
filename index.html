@@ -403,7 +403,7 @@
             // 建立 Prompt
             let prompt = "";
             if (textInput && !translationImageBase64) {
-                prompt = `請將以下中文句子翻譯成通順、達意且前後連貫的英文。\n"${textInput}"\n\n請提供3種不同的翻譯版本。請用數字列表格式回覆。`;
+                prompt = `將以下中文句子翻譯成英文。\n"${textInput}"\n\n 請用數字列表格式回覆。`;
             } else if (translationImageBase64) {
                 prompt = `這是一張包含中文句子的圖片。請將圖片中的中文句子翻譯成通順、達意且前後連貫的英文。如果圖片中有多個句子，請翻譯主要的句子，或是最多兩句。\n\n請提供3種不同的翻譯版本。請用數字列表格式回覆。`;
             }
@@ -436,7 +436,7 @@
             showResultState(mcq, 'loading');
 
             // 建立 Prompt
-            const prompt = "這是一份或多份英文作業圖片，內容包含選擇題和/或閱讀測驗。請仔細分析圖片中的所有問題，並提供每個問題的正確答案。\n\n請依照以下格式回覆：\n1. (答案)\n2. (答案)\n...\n如果題目有A, B, C, D選項，請直接提供選項（例如：B）。如果沒有選項，請提供簡短的答案。";
+            const prompt = "這是一份或多份英文作業圖片，內容包含選擇題/閱讀測驗或句子填充。請仔細分析圖片中的所有問題，並提供每個問題的正確答案。\n\n請依照以下格式回覆：\n1. (答案)\n2. (答案)\n...\n如果題目有A, B, C, D選項，請直接提供選項（例如：B）。如果沒有選項，請提供簡短的答案。";
 
             try {
                 const resultText = await callGeminiAPI(prompt, mcqImagesBase64);
